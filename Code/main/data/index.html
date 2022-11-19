@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+	<style>
+        .loader {
+            border: 5px solid #f3f3f327;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 3vw;
+            height: 3vw;
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .button {
+            background-color: #e2d2d2;
+            border: none;
+            color: rgb(0, 0, 0);
+            text-align: center;
+            display: inline-block;
+            margin: 3px 3px 3px 3px;
+        }
+        html {
+            height: 100%;
+        }
+		body {
+			background-image: url('/bg.jpg');
+			background-position: center;
+			background-repeat: no-repeat;
+			background-size: cover;
+		}
+    </style>
+	<head>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Prayer Setup</title>
+		<script type="text/javascript" src="/countries.json"></script>
+		<script type="text/javascript" src="/jquery.js"></script>
+	
+	</head>
+	<body>
+		<div id="menu" style="display:flex; flex-direction:column; align-items: center;">
+			<div style="display:flex; height: 100vh; flex-direction:column; justify-content:space-evenly;">
+				<button onclick="menuChange(this)" style="height: 5vh; background-color: #ad7979;">Country/City</button>
+				<button onclick="menuChange(this)" style="height: 5vh; background-color: #ad7979;">Date Time</button>
+				<button onclick="menuChange(this)" style="height: 5vh; background-color: #ad7979;">Wi-Fi Settings</button>
+			</div>
+		</div>
+
+		<div id="countryCityMenu" style="display:none; flex-direction:column;">
+			<label id="currentlyConnecetd" style="color:#dab0b0; display:flex; justify-content: center;"> Gettings Wi-Fi status</label>
+			<label id="currentlyCountry" style="color:#dab0b0; display:flex; justify-content: center;">Gettings current country</label>
+			<label id="currentlyCity" style="margin-bottom: 3vh; color:#dab0b0; display:flex; justify-content: center;">Gettings current city</label>
+			<div style="display:flex; flex-direction:row; justify-content: space-evenly;">
+				<label style="color:#f3f3f3;">Country:</label>
+				<select id="country" onchange="updateCities()" style="width:50vw"></select>
+			</div>
+			<div style="display:flex; flex-direction:row; justify-content: space-evenly;">
+				<label style="color:#f3f3f3">City:&emsp;&ensp;</label>
+				<select id="city" style="width:50vw"></select>
+			</div>
+			<div style="display:flex; flex-direction:row; justify-content: space-around; margin-top: 2vh;">
+				<button onclick="cancel(this)" style="background-color: #e90d0d; width: 30vw; height: 4vh;">Back</button>
+				<button id="buttonCity" onclick="set()" style="background-color: #0cb977fd; width: 30vw; height: 4vh;">Set</button>
+			</div>
+			<div id="countryCityMenu" style="display:flex; flex-direction:column; align-items: center;">
+				<button id="buttonPrayer" onclick="getPrayerData()" style="margin-top: 3vh; background-color: #0cb977fd; height: 4vh;">Download prayer data</button>
+				<label id="percent" style="margin-bottom: 3vh; color:#dab0b0;"></label>
+			</div>
+		</div>
+		<div id="datetimeMenu" style="display:none; flex-direction:column;">
+			<div style="display:flex; flex-direction:row; justify-content: space-evenly;">
+				<label style="color:#f3f3f3">Time:</label>
+				<input id="time" type="datetime-local" step=1>
+			</div>
+			<div style="display:flex; flex-direction:row; justify-content: space-around; margin-top: 2vh;">
+				<button onclick="cancel()" style="background-color: #e90d0d; width: 30vw; height: 4vh;">Back</button>
+				<button id="buttonDate" onclick="set()" style="background-color: #0cb977fd; width: 30vw; height: 4vh;">Set</button>
+			</div>
+		</div>
+
+		<div id="wifiMenu" style="display:none; flex-direction:column; align-items: center;">
+			<label id="currentlyConnecetd1" style="color:#dab0b0"> Gettings Wi-Fi status</label>
+			<div id="loaderCircle" style="display:none; margin-bottom: 1vh;" class="loader"></div>
+			<div id="resultDiv" style="display: none; flex-direction:column; overflow-y: auto; max-height:60vh;">
+
+			</div>
+			<div style="display:flex; flex-direction:row; align-items:center;">
+				<button onclick="startScan()" style="background-color: #9ce90d; width: 30vw; height: 5vh;">Start scan</button>
+			</div>
+			<div id="connectionDiv" style="display:none; flex-direction:column;justify-content: center;">
+				<label id="wifi_name" style="color:#f3f3f3">SSID: </label>
+				<div style="display:flex; flex-direction:row">
+					<label style="color:#f3f3f3">Pass:</label>
+					<input id="password" type="password">
+					<input type="checkbox" onclick="showHide()">
+					<label style="color:#f3f3f3">Show</label>
+				</div>
+				<button onclick="Connect()" style="background-color: #0cb977fd; height: 4vh;">Connect</button>
+			</div>
+			<button onclick="cancel()" style="background-color: #e90d0d; width: 30vw; height: 4vh; margin-top: 2vh;">Back</button>
+		</div>
+
+		
+	</body>
+
+	<script>
+		
+		var countyName = "";
+		var countryData = [];
+		var cityNames = [];
+		var countryCount = 0;
+		var cityCount = 0;
+		var BASE_URL = "http://8.8.8.8";
+		//var BASE_URL = "http://192.168.18.110";
+		var wifi_ssid;
+		var wifi_pass;
+		var currentMenu = "";
+
+		var loader = document.getElementById("loaderCircle");
+		var ssids = document.getElementById("resultDiv");
+		var wifiName = document.getElementById("wifi_name");
+		var connection = document.getElementById("connectionDiv");
+		var pass = document.getElementById("password");
+		var resultInterval;
+		var downloadPercentData;
+
+
+		function set() {
+			if(currentMenu == "Country/City") {
+				let x = document.getElementById('country').value;
+				let y = document.getElementById('city').value;
+				document.querySelector('#buttonCity').disabled = true;
+				$.ajax({
+					url: BASE_URL + '/set_city',
+					type: 'POST',
+					contentType: 'text/plain',
+					data: x + "," + y,
+					success: function (data) {
+						document.querySelector('#buttonCity').disabled = false;	
+						if(data == "ok")
+							alert("City updated");
+						else
+							alert("Failed to update city");
+					},
+					error: function(XMLHttpRequest, textStatus, errorThrown) { 
+						alert("Server not responding");
+					}
+				});
+			}
+			else if(currentMenu == "Date Time") {
+				let x = document.getElementById('time').value;
+				x = x.split("T");
+				document.querySelector('#buttonDate').disabled = true;
+				$.ajax({
+					url: BASE_URL + '/set_time',
+					type: 'POST',
+					contentType: 'text/plain',
+					data: x[1] + "," + x[0],
+					success: function (data) {
+						document.querySelector('#buttonDate').disabled = false;	
+						if(data == "ok")
+							alert("Time updated");
+						else
+							alert("Failed to update time... \nRTC not working");
+					},
+					error: function(XMLHttpRequest, textStatus, errorThrown) { 
+						alert("Server not responding");
+					}
+				});
+			}
+		}
+
+		function cancel() {
+			if(currentMenu == "Country/City") {
+				currentMenu = "";
+				let m1 = document.getElementById("countryCityMenu");
+				let m = document.getElementById("menu");
+				m1.style.display = "none";
+				m.style.display = "flex";
+				document.querySelector('#buttonCity').disabled = false;	
+			}
+			else if(currentMenu == "Date Time") {
+				let m2 = document.getElementById("datetimeMenu");
+				let m = document.getElementById("menu");
+				m2.style.display = "none";
+				m.style.display = "flex";
+				document.querySelector('#buttonDate').disabled = false;	
+			}
+			else if(currentMenu == "Wi-Fi Settings") {
+				let m3 = document.getElementById("wifiMenu");
+				let m = document.getElementById("menu");
+				m3.style.display = "none";
+				m.style.display = "flex";
+			}
+		}
+
+
+		function menuChange(element) {
+			currentMenu = element.innerHTML;
+			if(currentMenu == "Country/City") {
+				let m1 = document.getElementById("countryCityMenu");
+				let m = document.getElementById("menu");
+				m1.style.display = "flex";
+				m.style.display = "none";
+			}
+			else if(currentMenu == "Date Time") {
+				let m2 = document.getElementById("datetimeMenu");
+				let m = document.getElementById("menu");
+				m2.style.display = "flex";
+				m.style.display = "none";
+			}
+			else if(currentMenu == "Wi-Fi Settings") {
+				let m3 = document.getElementById("wifiMenu");
+				let m = document.getElementById("menu");
+				m3.style.display = "flex";
+				m.style.display = "none";
+			}
+		}
+
+
+		for (const [key, value] of Object.entries(countires)) {
+			countryData.push(value["name"]);
+			countryData[value["name"]] = [];
+			countryData[value["name"]] = value["cities"];
+		}
+		countryCount = countryData.length;
+		for(var i=0; i<countryCount; i++) {
+			$('#country').append('<option>' + countryData[i] + '</option>');
+		}
+
+		updateCities();
+
+		function updateCities(){
+			countyName = document.getElementById('country').value;
+			document.getElementById('city').innerHTML = "";
+			cityNames = countryData[countyName];
+			cityNames.sort;
+			for (var i = 0; i<cityNames.length; i++) {
+				$('#city').append('<option>' + cityNames[i] + '</option>');
+			}
+		}
+
+
+		function startScan() {
+			loader.style.display = "block";
+			connection.style.display = "none";
+			ssids.innerHTML = "";
+			$.ajax({
+				url: BASE_URL + '/scan_wifi',
+				success: function (data) {
+					if(data == "ok")
+						alert("Scan started");
+				},
+				error: function(XMLHttpRequest, textStatus, errorThrown) { 
+					alert("Server not responding");
+				}
+			});
+		}
+
+		function Connect() {
+			wifi_pass = pass.value;
+			$.ajax({
+				url: BASE_URL + '/connect_wifi',
+				type: 'POST',
+				contentType: 'text/plain',
+				data: wifi_ssid+","+wifi_pass,
+				success: function (data) {
+					if(data == "ok")
+						alert("Connecting Wi-Fi");
+					else
+						alert("Failed to start Wi-Fi connection");
+				},
+				error: function(XMLHttpRequest, textStatus, errorThrown) { 
+					alert("Server not responding");
+				}
+			});
+		}
+
+		function changeSSID(element) {
+			connection.style.display = "flex    ";
+			wifi_ssid = element.innerHTML;
+			wifiName.innerHTML = "SSID: " + wifi_ssid;
+			wifi_pass = "";
+		}
+
+		function showHide() {
+			if (pass.type === "password") {
+				pass.type = "text";
+			} else {
+				pass.type = "password";
+			}
+		}
+
+		function getPrayerData() {	
+			document.querySelector('#buttonPrayer').disabled = true;
+			$.ajax({
+				url: BASE_URL + '/prayer_data',
+				success: function (data) {
+					if(data == "ok") {
+						alert("Downloading started \nwait until download completes");
+					}
+					else {
+						alert("Failed to start download");
+						document.querySelector('#buttonPrayer').disabled = false;
+					}
+				},
+				error: function(XMLHttpRequest, textStatus, errorThrown) { 
+					alert("Server not responding");
+				}
+			});
+		}
+
+		if (!!window.EventSource) {
+			var source = new EventSource('/events');
+
+			source.addEventListener('open', function(e) {
+			}, false);
+
+			source.addEventListener('error', function(e) {
+				if (e.target.readyState != EventSource.OPEN) {
+				}
+			}, false);
+
+			
+			source.addEventListener('info', function(e) {
+				let s = e.data.split(",");
+				document.getElementById("currentlyCountry").innerHTML = "Currently set Country: " + s[0];
+				document.getElementById("currentlyCity").innerHTML = "Currently set City: " + s[1];
+				document.getElementById('country').value = s[0];
+				updateCities();
+				document.getElementById('city').value = s[1];
+			}, false);
+
+			source.addEventListener('download', function(e) {
+				var obj = JSON.parse(e.data);
+				if(obj['s'] == "E") {
+					alert("Downloading failed\nReason:\n"+obj['r']);
+					document.querySelector('#buttonPrayer').disabled = false;
+				}
+				
+				else if(obj['s'] == "C") {
+					document.getElementById("percent").innerHTML = "Downloading " + obj['r'] + " %";
+					if(obj['r'] == 100)
+						document.querySelector('#buttonPrayer').disabled = false;
+				}
+			}, false);
+
+			source.addEventListener('wifi_status', function(e) {
+				var x = "";
+				var obj = JSON.parse(e.data);
+				if(obj["s"] == '0') 
+					x = "Connected to: " + obj["n"];
+				else if(obj["s"] == '1')
+					x = "Failed to Connect due to\n" + obj["r"];
+				if(obj["s"] == '2')
+					x = "Connecting to: " + obj["n"];
+				
+				document.getElementById("currentlyConnecetd").innerHTML = x;
+				document.getElementById("currentlyConnecetd1").innerHTML = x;
+			}, false);
+
+			source.addEventListener('scan_result', function(e) {
+				let obj = JSON.parse(e.data);
+				let x='';
+				loader.style.display = "none";
+				ssids.style.display = "flex";
+				let displayedSSIDs = [];
+				for(let i=0; i<obj.length; i++) {
+					if(obj[i] != undefined && obj[i] != "") {
+						if(displayedSSIDs.includes(obj[i]) == false) {
+							x += '<button class="button" onClick=changeSSID(this) >' + obj[i] + '</button>';
+							displayedSSIDs.push(obj[i]);
+						}
+					}
+				}
+				ssids.innerHTML = x;
+			}, false);
+		}
+		
+	</script>
+</html>
