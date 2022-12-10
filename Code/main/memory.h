@@ -37,6 +37,11 @@ bool savePrayerData(const char *filename, String fileData) {
 String readPrayerData(const char *filename) {
   File file = SPIFFS.open(filename, FILE_READ);
   String ReadData = "";
+  #if(DEBUG_EEPROM == true && DEBUG_MAIN == true)
+    Serial.printf("[SPIFFS] Reading file: ");
+    Serial.printf(filename);
+    Serial.printf("\n");
+  #endif
   if(file){
     if(file.size()>10){
       while (file.available())
@@ -55,10 +60,12 @@ void updatePrayerData() {
   }
   else {
     prayerDataAvailable = true;
-    deserializeJson(currentMonthData, fileData);
+    File file = SPIFFS.open(fileName.c_str(), FILE_READ);
+    deserializeJson(doc, file);
+    file.close();
     #if(DEBUG_EEPROM == true && DEBUG_MAIN == true)
       Serial.printf("[SPIFFS] Json data: ");
-      serializeJson(currentMonthData, Serial);
+      serializeJson(doc, Serial);
       Serial.printf("\n");
     #endif
   }

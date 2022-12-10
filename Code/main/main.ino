@@ -17,9 +17,9 @@
 
 #ifdef USING_PCB
   #include <virtuabotixRTC.h>
-  #define RTC_CLK   14
-  #define RTC_DATA  13
-  #define RTC_CE    16
+  #define RTC_CLK   22
+  #define RTC_DATA  21
+  #define RTC_CE    15
   const uint8_t mth_key[12] = {1,3,3,0,2,5,0,3,6,1,4,6};
   virtuabotixRTC myRtc(RTC_CLK, RTC_DATA, RTC_CE);
 #else
@@ -32,12 +32,16 @@ internet_t      structInternet;
 device_mode_t   deviceMode    = SETUP;
 server_status_t structServer  = STOPPED;
 
+voltage_status_t    currentVoltageStatus = LOW_VOLTAGE;
+voltage_status_t    lastVoltageStatus = LOW_VOLTAGE;
+unsigned long lastVoltageRead = 0;
+
 IPAddress        apIP(8,8,8,8);
 DNSServer        dnsServer;
 AsyncWebServer   server(80);
 AsyncEventSource events("/events");
 
-DynamicJsonDocument currentMonthData(4000);
+DynamicJsonDocument doc(60000);
 
 void serverRoutes();
 void startServer();
@@ -65,11 +69,13 @@ tmElements_t my_time;
 
 Button  buttonMode(MODE_BUTTON, 500);
 Button  buttonPrayer(PRAYER_BUTTON, 500);
+Button  buttonExtra(EXTRA_BUTTON, 500);
 
+#define SD_MODE_PIN 17
 i2s_pin_config_t i2s_speaker_pins = {
-  .bck_io_num = GPIO_NUM_19,
-  .ws_io_num = GPIO_NUM_23,
-  .data_out_num = GPIO_NUM_18,
+  .bck_io_num = GPIO_NUM_27,  // BCLK
+  .ws_io_num = GPIO_NUM_14,   // LRCL
+  .data_out_num = GPIO_NUM_26,// DIN
   .data_in_num = I2S_PIN_NO_CHANGE
 };
 
@@ -84,7 +90,7 @@ unsigned long convertStringToUnix(String string, bool nextDay) {
   my_time.Hour   = h;
   my_time.Minute = m;
   my_time.Day    = currentSelectedDay;
-  my_time.Month  = currentSelectedMonth;      // months start from 0, so deduct 1
+  my_time.Month  = currentSelectedMonth;
   my_time.Year   = currentYear - 1970;
   ut = makeTime(my_time);
   if(h == 0 && nextDay) {
@@ -94,18 +100,17 @@ unsigned long convertStringToUnix(String string, bool nextDay) {
 }
 
 
-
 void play_task(void *param) {
   Output *output = new I2SOutput(I2S_NUM_0, i2s_speaker_pins);
   unsigned long prayersUnixTime[5];
   while (true){
-    buttonPrayer.read();
-    if(buttonPrayer.pressedFor(500)) {
+    if(buttonPrayerPressed) {
+      buttonPrayerPressed = false;
       if(prayerDataAvailable) {
         String p = String(currentSelectedDay);
-        unsigned long sunRiseUnix = convertStringToUnix(currentMonthData[p][5], false);
-        unsigned long sunSetUnix  = convertStringToUnix(currentMonthData[p][6], false);
-        unsigned long midNightUnix = convertStringToUnix(currentMonthData[p][7], true);
+        unsigned long sunRiseUnix  = convertStringToUnix(doc[p][5], false);
+        unsigned long sunSetUnix   = convertStringToUnix(doc[p][6], false);
+        unsigned long midNightUnix = convertStringToUnix(doc[p][7], true);
         /*Serial.print("Current Unix: ");
         Serial.println(currentUnixTime);
         Serial.print(" sunset Unix: ");
@@ -113,7 +118,7 @@ void play_task(void *param) {
         Serial.print(" sunrise Unix: ");
         Serial.println(sunRiseUnix);*/
         for(uint8_t i=0; i<5; i++)
-          prayersUnixTime[i] = convertStringToUnix(currentMonthData[p][i], false);
+          prayersUnixTime[i] = convertStringToUnix(doc[p][i], false);
 
         bool prayerFound = false;
         for(uint8_t i=0; i<5; i++) {
@@ -128,6 +133,7 @@ void play_task(void *param) {
                 #if (DEBUG_MAIN == true)
                   Serial.println("[Prayer] Fajr");
                 #endif
+                playingAudio = true;
                 play(output, "/spiffs/Fajr.wav");
                 prayerFound = true;
               }
@@ -137,6 +143,7 @@ void play_task(void *param) {
                 #if (DEBUG_MAIN == true)
                   Serial.println("[Prayer] Duhr");
                 #endif
+                playingAudio = true;
                 play(output, "/spiffs/Duhr.wav");
                 prayerFound = true;
               }
@@ -146,6 +153,7 @@ void play_task(void *param) {
                 #if (DEBUG_MAIN == true)
                   Serial.println("[Prayer] Asr");
                 #endif
+                playingAudio = true;
                 play(output, "/spiffs/Asr.wav");
                 prayerFound = true;
               }
@@ -156,6 +164,7 @@ void play_task(void *param) {
                   Serial.println("[Prayer] Maghrib");
                 #endif
                 play(output, "/spiffs/Maghrib.wav");
+                playingAudio = true;
                 prayerFound = true;
               }
               break;
@@ -164,6 +173,7 @@ void play_task(void *param) {
                 #if (DEBUG_MAIN == true)
                   Serial.println("[Prayer] Isha");
                 #endif
+                playingAudio = true;
                 play(output, "/spiffs/Isha.wav");
                 prayerFound = true;
               }
@@ -174,9 +184,19 @@ void play_task(void *param) {
           #if (DEBUG_MAIN == true)
             Serial.println("[Prayer] No Prayer time");
           #endif
+          playingAudio = true;
           play(output, "/spiffs/NoPrayer.wav");
         }
       }
+    }
+    else if(buttonExtraPressed) {
+      buttonExtraPressed = false;
+      currentAudioFileIndex += 1;
+      if(currentAudioFileIndex >= TOTAL_FILES) {
+        currentAudioFileIndex = 0;
+      }
+      playingAudio = true;
+      play(output, fileNamesList[currentAudioFileIndex]);
     }
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
@@ -194,13 +214,19 @@ void setup() {
 
   initEEPROM();
   readonfigurations();
-
-  
   beginRTC();
 
   buttonPrayer.begin();
   buttonMode.begin();
-  buttonMode.read();
+  buttonExtra.begin();
+
+  pinMode(STATUS_LED, OUTPUT);
+  pinMode(BATTERY_HIGH_LED, OUTPUT);
+  pinMode(BATTERY_LOW_LED, OUTPUT);
+  pinMode(BATTERY_MEASURE_PIN, INPUT);
+  pinMode(SD_MODE_PIN, OUTPUT);
+  digitalWrite(SD_MODE_PIN, HIGH); // HIGH Right channel, LOW AMP will shutdown(No Audio)
+  
   delay(1000);
 
   if(buttonMode.read())
@@ -214,6 +240,7 @@ void setup() {
     #if (DEBUG_MAIN == true)
       Serial.printf("[Main] Device is in setup mode\n");
     #endif
+    digitalWrite(STATUS_LED, HIGH);
     initInternet();
     delay(200);
     startServer();
@@ -224,6 +251,7 @@ void setup() {
       Serial.printf("[Main] Device is in watch mode\n");
       Serial.printf("[Main] Device must have prayer data stored and RTC configured\n");
     #endif
+    digitalWrite(STATUS_LED, LOW);
     updateRTC();
     currentSelectedMonth = lastSelectedMonth;
     currentSelectedDay   = lastSelectedDay;
@@ -249,6 +277,12 @@ void restartESP() {
   ESP.restart();
 }
 
+float getCurrentVoltage() {
+  float rawValue = analogRead(BATTERY_MEASURE_PIN);
+  rawValue = (rawValue * 3.3) / 4095;
+  return rawValue / (RESISTOR_2/(RESISTOR_1+RESISTOR_2)); 
+}
+
 
 void loop() {
   if(buttonMode.read() && deviceMode == WATCH)
@@ -261,18 +295,62 @@ void loop() {
     if(structServer == RUNNING)
       dnsServer.processNextRequest();
 
-    if(startDwonload) {
+    if(startDownload) {
       getDataFromAPI();
-      startDwonload = false;
+      startDownload = false;
     }
   }
   else {
-    if(millis() - lastRTCUpdate >= 2000) {
+    if(millis() - lastRTCUpdate >= 5000 && (!playingAudio)) {
       updateRTC();
       if(lastSelectedMonth != currentSelectedMonth) {
         currentSelectedMonth = lastSelectedMonth;
         updatePrayerData();
       }
     }
+    buttonPrayer.read();
+    buttonExtra.read();
+    if(buttonPrayer.pressedFor(300)) {
+      if(playingAudio) {
+        playingAudio = false;
+        vTaskDelay(500);
+      }
+      buttonPrayerPressed = true;
+    }
+    else if(buttonExtra.pressedFor(300)) {
+      if(playingAudio) {
+        playingAudio = false;
+        vTaskDelay(500);
+      }
+      buttonExtraPressed = true;
+    }
+  }
+  if(millis() - lastVoltageRead >= 10000 && (!playingAudio)) {
+    if(getCurrentVoltage() >= FULL_THRESHOLD_VOLTAGE) {
+      currentVoltageStatus = FULL_VOLTAGE;
+    }
+    else if(getCurrentVoltage() < FULL_THRESHOLD_VOLTAGE && getCurrentVoltage() > LOW_THRESHOLD_VOLTAGE) {
+      currentVoltageStatus = MID_VOLTAGE;
+    }
+    else if(getCurrentVoltage() <= LOW_THRESHOLD_VOLTAGE) {
+      currentVoltageStatus = LOW_VOLTAGE;
+    }
+    if(currentVoltageStatus != lastVoltageStatus) {
+      if(currentVoltageStatus == LOW_VOLTAGE) {
+        digitalWrite(BATTERY_LOW_LED, HIGH);
+        digitalWrite(BATTERY_HIGH_LED, LOW);
+      }
+      else if(currentVoltageStatus == MID_VOLTAGE) {
+        digitalWrite(BATTERY_LOW_LED, LOW);
+        digitalWrite(BATTERY_LOW_LED, LOW);
+        
+      }
+      else if(currentVoltageStatus == FULL_VOLTAGE) {
+        digitalWrite(BATTERY_LOW_LED, LOW);
+        digitalWrite(BATTERY_HIGH_LED, HIGH);
+      }
+      lastVoltageStatus = currentVoltageStatus;
+    }
+    lastVoltageRead = millis();
   }
 }

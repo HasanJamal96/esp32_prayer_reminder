@@ -1,5 +1,3 @@
-DynamicJsonDocument doc(60000);
-
 const char* prayerNames[] = {"Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"};
 
 void getDataFromAPI() {
@@ -10,6 +8,9 @@ void getDataFromAPI() {
     events.send("{\"s\":\"E\",\"r\":\"Wi-Fi not connected\"}","download",millis());
     return;
   }
+  #if(DEBUG_API == true && DEBUG_MAIN == true)
+    Serial.printf("[API] Downloading\n");
+  #endif
   HTTPClient http;
   http.useHTTP10(true);
   for(uint8_t i=1; i<13; i++) { // 12 months a year
@@ -17,21 +18,13 @@ void getDataFromAPI() {
     char p[150];
     String s="";
     strcpy(p, BASE_API_START);
-    for(uint8_t i=0; i<strlen(structLocation.city); i++) {
-      if(structLocation.city[i] != ' ')
-        s += structLocation.city[i];
-      else
-        s += "%20";
-    }
+    s = (structLocation.city);
+    s.replace(" ","%20");
     strcat(p, s.c_str());
     strcat(p, BASE_API_MID);
-    s = "";
-    for(uint8_t i=0; i<strlen(structLocation.country); i++) {
-      if(structLocation.city[i] != ' ')
-        s += structLocation.country[i];
-      else
-        s += "%20";
-    }
+    
+    s = (structLocation.country);
+    s.replace(" ","%20");
     strcat(p, s.c_str());
     strcat(p, BASE_API_END);
     strcat(p, c.c_str());

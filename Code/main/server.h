@@ -94,7 +94,7 @@ void serverRoutes() {
     WiFi.scanNetworks(true, false, false, 100);
   });
   server.on("/prayer_data",HTTP_GET,[](AsyncWebServerRequest * request) {
-    startDwonload = true;
+    startDownload = true;
     #if(DEBUG_MAIN == true && DEBUG_INTERNET == true)
       Serial.printf("[Internet] StartDownload\n");
     #endif

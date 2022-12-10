@@ -30,9 +30,9 @@ void setRTCTime(int year, int month, int day, int hour, int minute, int second) 
   myRtc.setDS1302Time(second, minute, hour, dow, day, month, year);
 #else
   myRtc.adjust(DateTime(year, month, day, hour, minute, second));
-  #if(DEBUG_MAIN == true && DEBUG_RTC == true)
-    Serial.printf("[RTC] Uopdated\n");
-  #endif
+#endif
+#if(DEBUG_MAIN == true && DEBUG_RTC == true)
+  Serial.printf("[RTC] Updated\n");
 #endif
 }
 
@@ -49,7 +49,7 @@ void updateRTC() {
   my_time.Hour   = currentHour;
   my_time.Minute = currentMinute;
   my_time.Day    = lastSelectedDay;
-  my_time.Month  = lastSelectedMonth;      // months start from 0, so deduct 1
+  my_time.Month  = lastSelectedMonth;
   my_time.Year   = currentYear - 1970;
   currentUnixTime = makeTime(my_time);
 #else
@@ -61,5 +61,10 @@ void updateRTC() {
   currentHour       = now.hour();
   currentMinute     = now.minute();
 #endif
+  if(lastSelectedMonth > 12)
+    rtcWorking = false;
+  #if(DEBUG_MAIN == true && DEBUG_RTC == true)
+    Serial.printf("[RTC]%d/%d/%d %d:%d\n", currentYear, lastSelectedMonth, lastSelectedDay, currentHour, currentMinute);
+  #endif
   lastRTCUpdate = millis();
 }

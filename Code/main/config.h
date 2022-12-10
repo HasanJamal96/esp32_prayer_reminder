@@ -5,25 +5,51 @@
 //#define DEBUG_RTC       true
 //#define DEBUG_API       true
 
-#define USING_PCB
+#define USING_PCB //uncomment this line if you are using RTC DS1302
 
 
 #if (DEBUG_MAIN == true)
 #define BAUDRATE  115200
 #endif
 
-const char VERSION[] = "0.1";
+const char VERSION[] = "0.2";
 
 const char* BASE_API_START = "http://api.aladhan.com/v1/calendarByCity?city=";
 const char* BASE_API_MID = "&country=";
 const char* BASE_API_END = "&month=";
 
-#define MODE_BUTTON 4
-#define PRAYER_BUTTON 5
+#define MODE_BUTTON   39
+#define PRAYER_BUTTON 36
+#define EXTRA_BUTTON  35
+
+#define BATTERY_MEASURE_PIN 34
+const float FULL_THRESHOLD_VOLTAGE = 1.80;
+const float LOW_THRESHOLD_VOLTAGE = 1.6;
+const float RESISTOR_1 = 100000;
+const float RESISTOR_2 = 100000;
+
+#define STATUS_LED          2
+#define BATTERY_HIGH_LED    4
+#define BATTERY_LOW_LED     16
+
+typedef enum: uint8_t {
+  LOW_VOLTAGE =  0,
+  FULL_VOLTAGE = 1,
+  MID_VOLTAGE  = 2,
+}voltage_status_t;
 
 bool rtcWorking = false;
-bool startDwonload = false;
+bool startDownload = false;
 bool prayerDataAvailable = false;
+bool playingAudio = false;
+
+bool buttonPrayerPressed = false;
+bool buttonExtraPressed = false;
+
+const uint8_t TOTAL_FILES     = 3;
+int8_t currentAudioFileIndex = -1;
+const char *fileNamesList[TOTAL_FILES] = {"/spiffs/Salam.wav", "/spiffs/Al-Fatihah.wav", "/spiffs/Ayat Al-Kursi.wav"};
+//const char *fileNamesList[TOTAL_FILES] = {"/spiffs/Salam.wav", "/spiffs/Maghrib.wav", "/spiffs/Fajr.wav"};
 
 typedef enum: uint8_t {
   SETUP = 0,
